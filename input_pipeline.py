@@ -1,14 +1,18 @@
 import torch
 
-    
+
+def get_loaders():
+    pass
+
+
 def get_random_datasets(batch_size, k, min_size, max_size):
     """
     Generates a random mixture of k gaussians in the plane.
-    Means are in range [-4, 4]x[-4, 4].
+    Means are in square [-4, 4]x[-4, 4].
     Standard deviation is 0.3.
 
-    Arguments: 
-        batch_size: an integer, number of datasets. 
+    Arguments:
+        batch_size: an integer, number of datasets.
         k: an integer, number of clusters in each dataset.
         min_size, max_size: integers.
     Returns:

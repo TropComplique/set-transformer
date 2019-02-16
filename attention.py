@@ -55,16 +55,18 @@ class MultiheadAttention(nn.Module):
         # everything is projected to this dimension
         p = d // h
 
-        self.project_queries = nn.Linear(d, d, bias=False)
-        self.project_keys = nn.Linear(d, d, bias=False)
-        self.project_values = nn.Linear(d, d, bias=False)
-        self.concatenation = nn.Linear(d, d, bias=False)
-        nn.init.xavier_normal_(self.project_queries.weight)
-        nn.init.xavier_normal_(self.project_keys.weight)
-        nn.init.xavier_normal_(self.project_values.weight)
-        nn.init.xavier_normal_(self.concatenation.weight)
-
+        self.project_queries = nn.Linear(d, d)
+        self.project_keys = nn.Linear(d, d)
+        self.project_values = nn.Linear(d, d)
+        self.concatenation = nn.Linear(d, d)
         self.attention = Attention(temperature=p**0.5)
+
+        def weights_init(m):
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_normal_(m.weight)
+                nn.init.zeros_(m.bias)
+
+        self.apply(weights_init)
 
     def forward(self, queries, keys, values):
         """

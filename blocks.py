@@ -5,21 +5,21 @@ from attention import MultiheadAttention
 
 class MultiheadAttentionBlock(nn.Module):
 
-    def __init__(self, d, h):
+    def __init__(self, d, h, rff):
         """
         Arguments:
             d: an integer, input dimension.
             h: an integer, number of heads.
+            rff: a module, row-wise feedforward layer.
+                It takes a float tensor with shape [b, n, d] and
+                returns a float tensor with the same shape.
         """
         super().__init__()
 
         self.multihead = MultiheadAttention(d, h)
         self.layer_norm1 = nn.LayerNorm(d)
         self.layer_norm2 = nn.LayerNorm(d)
-
-        # row-wise feedforward layer
-        self.rff = nn.Linear(d, d, bias=False)
-        nn.init.xavier_normal_(self.rff.weight)
+        self.rff = rff
 
     def forward(self, x, y):
         """
@@ -41,9 +41,9 @@ class MultiheadAttentionBlock(nn.Module):
 
 class SetAttentionBlock(nn.Module):
 
-    def __init__(self, d, num_heads):
+    def __init__(self, d, h, rff):
         super().__init__()
-        self.mab = MultiheadAttentionBlock(d, num_heads)
+        self.mab = MultiheadAttentionBlock(d, h, rff)
 
     def forward(self, x):
         """
@@ -57,10 +57,10 @@ class SetAttentionBlock(nn.Module):
 
 class InducedSetAttentionBlock(nn.Module):
 
-    def __init__(self, d, m, num_heads):
+    def __init__(self, d, m, h, first_rff, second_rff):
         super().__init__()
-        self.mab1 = MultiheadAttentionBlock(d, num_heads)
-        self.mab2 = MultiheadAttentionBlock(d, num_heads)
+        self.mab1 = MultiheadAttentionBlock(d, h, first_rff)
+        self.mab2 = MultiheadAttentionBlock(d, h, second_rff)
         self.inducing_points = nn.Parameter(torch.randn(m, d))
 
     def forward(self, x):
@@ -70,26 +70,16 @@ class InducedSetAttentionBlock(nn.Module):
         Returns:
             a float tensor with shape [b, n, d].
         """
-
-        i = self.inducing_points.unsqueeze(0).repeat([b, 1, 1])
-        # it has shape [b, m, d]
-
-        h = self.mab1(i, x)
-        # it has shape [b, m, d]
-
+        i = self.inducing_points.unsqueeze(0).repeat([b, 1, 1])  # shape [b, m, d]
+        h = self.mab1(i, x)  # shape [b, m, d]
         return self.mab2(x, h)
 
 
 class PoolingMultiheadAttention(nn.Module):
 
-    def __init__(self, d, k, num_heads):
+    def __init__(self, d, k, h, rff):
         super().__init__()
-
-        # row-wise feedforward layer
-        self.rff = nn.Linear(d, d, bias=False)
-        nn.init.xavier_normal_(self.rff.weight)
-
-        self.mab = MultiheadAttentionBlock(d, num_heads)
+        self.mab = MultiheadAttentionBlock(d, h, rff)
         self.seed_vectors = nn.Parameter(torch.randn(k, d))
 
     def forward(self, z):
@@ -99,8 +89,7 @@ class PoolingMultiheadAttention(nn.Module):
         Returns:
             a float tensor with shape [b, k, d].
         """
-
-        s = self.seed_vectors.unsqueeze(0).repeat([b, 1, 1])
-        # it has shape [b, k, d]
-
-        return self.mab(s, self.rff(z))
+        s = self.seed_vectors.unsqueeze(0).repeat([b, 1, 1])  # shape [b, k, d]
+        return self.mab(s, z)
+        # note that in the original paper
+        # they return mab(s, rff(z))

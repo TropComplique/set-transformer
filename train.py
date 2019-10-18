@@ -2,6 +2,7 @@ import os
 import time
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -10,10 +11,10 @@ from model import SetTransformer
 from input_pipeline import get_random_datasets
 
 
-BATCH_SIZE = 32
-NUM_STEPS = 50000
-EVAL_STEP = 5000
-MODELS_DIR = 'models/run00/'
+BATCH_SIZE = 1024
+NUM_STEPS = 10000
+EVAL_STEP = 1000
+MODELS_DIR = 'models/run00'
 LOGS_DIR = 'summaries/run00/'
 DEVICE = torch.device('cuda:0')
 USE_FLOAT16 = False
@@ -56,8 +57,8 @@ class LogLikelihood(nn.Module):
         EPSILON = torch.tensor(1e-8, device=device)
         PI = torch.tensor(3.141592653589793, device=device)
 
-        variances += EPSILON
-        pis += EPSILON
+        variances = variances + EPSILON
+        pis = pis + EPSILON
 
         x = x.unsqueeze(2)  # shape [b, n, 1, c]
         means = means.unsqueeze(1)  # shape [b, 1, k, c]
@@ -67,19 +68,19 @@ class LogLikelihood(nn.Module):
         x = x - means  # shape [b, n, k, c]
         x = - 0.5 * c * torch.log(2.0 * PI) - 0.5 * variances.log().sum(3) - 0.5 * (x.pow(2) / variances).sum(3)
         # it has shape [b, n, k], it represents log likelihood of multivariate normal distribution
-
+        #print(x.max().item(), pis.mean().item())
         x = x + pis.log()
         # it has shape [b, n, k]
 
-        return x.logsumexp(2).sum(1).mean(0)
+        return x.logsumexp(2).mean(1).mean(0)  # !
 
 
 def get_parameters(y):
     b = y.size(0)  # batch size
-    y = torch.split(y, [2 * K, 2 * K, K], axis=1)
+    y = torch.split(y, [2 * K, 2 * K, K], dim=1)
     means = y[0].view(b, K, 2)
     variances = y[1].exp().view(b, K, 2)
-    pis = y[2].exp()  # shape [b, K]
+    pis = F.softmax(y[2], dim=1)  # shape [b, K]
     return means, variances, pis
 
 
@@ -90,15 +91,13 @@ def train_and_evaluate():
         x, _ = get_random_datasets(BATCH_SIZE, K, MIN_SIZE, MAX_SIZE)
         val_datasets.append(x)
 
-    num_steps = NUM_EPOCHS * (len(dataset) // BATCH_SIZE)
-
     writer = SummaryWriter(LOGS_DIR)
     model = SetTransformer(num_outputs=5 * K)
     model = model.train().to(DEVICE)
     criterion = LogLikelihood()
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-4)
-    scheduler = CosineAnnealingLR(optimizer, T_max=num_steps, eta_min=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-4)
+    scheduler = CosineAnnealingLR(optimizer, T_max=NUM_STEPS, eta_min=1e-3)
 
     if USE_FLOAT16:
         model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
@@ -116,7 +115,7 @@ def train_and_evaluate():
 
         y = model(x)  # shape [b, 5 * K]
         means, variances, pis = get_parameters(y)
-        loss = criterion(x, means, variances, pis)
+        loss = -criterion(x, means, variances, pis)
 
         if USE_FLOAT16:
             with amp.scale_loss(loss, optimizer) as loss_scaled:
@@ -131,12 +130,12 @@ def train_and_evaluate():
         step_time = round(1000 * step_time, 1)
 
         writer.add_scalar('loss', loss.item(), iteration)
-        print(f'iteration {iteration}, time {step_time} ms')
+        print(f'iteration {iteration}, time {step_time} ms, {loss.item():.3f}')
 
         if iteration % EVAL_STEP == 0:
             loss = evaluate(model, criterion, val_datasets)
-            writer.add_scalar('val_loss', loss.item(), iteration)
-            path = os.path.join(MODELS_DIR, f'iteration_{iteration}.pth')
+            writer.add_scalar('val_loss', loss, iteration)
+            path = f'{MODELS_DIR}_iteration_{iteration}.pth'
             torch.save(model.state_dict(), path)
 
 

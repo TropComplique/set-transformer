@@ -18,11 +18,12 @@ class SetTransformer(nn.Module):
         h = 4  # number of heads
         k = 4  # number of seed vectors
 
-        self.encoder = nn.Sequantial(
+        self.encoder = nn.Sequential(
+            nn.Linear(2, d),
             InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
             InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d))
         )
-        self.decoder = nn.Sequantial(
+        self.decoder = nn.Sequential(
             PoolingMultiheadAttention(d, k, h, RFF(d)),
             SetAttentionBlock(d, h, RFF(d))
         )

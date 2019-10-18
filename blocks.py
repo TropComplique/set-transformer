@@ -79,8 +79,9 @@ class InducedSetAttentionBlock(nn.Module):
         Returns:
             a float tensor with shape [b, n, d].
         """
+        b = x.size(0)
         p = self.inducing_points
-        p = y.repeat([b, 1, 1])  # shape [b, m, d]
+        p = p.repeat([b, 1, 1])  # shape [b, m, d]
         h = self.mab1(p, x)  # shape [b, m, d]
         return self.mab2(x, h)
 
@@ -108,6 +109,7 @@ class PoolingMultiheadAttention(nn.Module):
         Returns:
             a float tensor with shape [b, k, d].
         """
+        b = z.size(0)
         s = self.seed_vectors
         s = s.repeat([b, 1, 1])  # shape [b, k, d]
 

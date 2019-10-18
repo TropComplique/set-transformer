@@ -7,6 +7,7 @@ class Attention(nn.Module):
 
     def __init__(self, temperature):
         super().__init__()
+
         self.temperature = temperature
         self.softmax = nn.Softmax(dim=2)
 
@@ -49,7 +50,6 @@ class MultiheadAttention(nn.Module):
         super().__init__()
 
         assert d % h == 0
-        self.d = d
         self.h = h
 
         # everything is projected to this dimension
@@ -60,13 +60,6 @@ class MultiheadAttention(nn.Module):
         self.project_values = nn.Linear(d, d)
         self.concatenation = nn.Linear(d, d)
         self.attention = Attention(temperature=p**0.5)
-
-        def weights_init(m):
-            if isinstance(m, nn.Linear):
-                nn.init.xavier_normal_(m.weight)
-                nn.init.zeros_(m.bias)
-
-        self.apply(weights_init)
 
     def forward(self, queries, keys, values):
         """
@@ -91,11 +84,11 @@ class MultiheadAttention(nn.Module):
         keys = keys.view(b, m, h, p)
         values = values.view(b, m, h, p)
 
-        queries = queries.permute(2, 0, 1, 3).contiguous().view(h*b, n, p)
-        keys = keys.permute(2, 0, 1, 3).contiguous().view(h*b, m, p)
-        values = values.permute(2, 0, 1, 3).contiguous().view(h*b, m, p)
+        queries = queries.permute(2, 0, 1, 3).contiguous().view(h * b, n, p)
+        keys = keys.permute(2, 0, 1, 3).contiguous().view(h * b, m, p)
+        values = values.permute(2, 0, 1, 3).contiguous().view(h * b, m, p)
 
-        output = self.attention(queries, keys, values)  # shape [h*b, n, p]
+        output = self.attention(queries, keys, values)  # shape [h * b, n, p]
         output = output.view(h, b, n, p)
         output = output.permute(1, 2, 0, 3).contiguous().view(b, n, d)
         output = self.concatenation(output)  # shape [b, n, d]

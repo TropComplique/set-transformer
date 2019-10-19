@@ -14,7 +14,7 @@ from input_pipeline import get_random_datasets
 BATCH_SIZE = 1024
 NUM_STEPS = 10000
 EVAL_STEP = 1000
-MODELS_DIR = 'models/run00'
+SAVE_PREFIX = 'models/run00'
 LOGS_DIR = 'summaries/run00/'
 DEVICE = torch.device('cuda:0')
 USE_FLOAT16 = False
@@ -38,6 +38,9 @@ class LogLikelihood(nn.Module):
 
     def forward(self, x, means, variances, pis):
         """
+        This function returns average likelihood per data.
+        Also it averages over the batch dimension.
+
         `x` - a batch of datasets of equal size.
         `means, variances, pis` - parameters of distributions.
 
@@ -68,35 +71,46 @@ class LogLikelihood(nn.Module):
         x = x - means  # shape [b, n, k, c]
         x = - 0.5 * c * torch.log(2.0 * PI) - 0.5 * variances.log().sum(3) - 0.5 * (x.pow(2) / variances).sum(3)
         # it has shape [b, n, k], it represents log likelihood of multivariate normal distribution
-        #print(x.max().item(), pis.mean().item())
+
         x = x + pis.log()
         # it has shape [b, n, k]
 
-        return x.logsumexp(2).mean(1).mean(0)  # !
+        average_likelihood = x.logsumexp(2).mean(1)
+        # it has shape [b]
+
+        # now average over the batch
+        return average_likelihood.mean(0)
 
 
 def get_parameters(y):
+    """
+    This function transforms output of the network
+    to the parameters of the distribution.
+    """
+
     b = y.size(0)  # batch size
     y = torch.split(y, [2 * K, 2 * K, K], dim=1)
+
     means = y[0].view(b, K, 2)
     variances = y[1].exp().view(b, K, 2)
     pis = F.softmax(y[2], dim=1)  # shape [b, K]
+
     return means, variances, pis
 
 
 def train_and_evaluate():
 
     val_datasets = []
-    for _ in range(100):
+    for _ in range(300):
         x, _ = get_random_datasets(BATCH_SIZE, K, MIN_SIZE, MAX_SIZE)
         val_datasets.append(x)
 
     writer = SummaryWriter(LOGS_DIR)
-    model = SetTransformer(num_outputs=5 * K)
+    model = SetTransformer(in_dimension=2, out_dimension=5 * K)
     model = model.train().to(DEVICE)
     criterion = LogLikelihood()
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-5)
     scheduler = CosineAnnealingLR(optimizer, T_max=NUM_STEPS, eta_min=1e-3)
 
     if USE_FLOAT16:
@@ -105,17 +119,18 @@ def train_and_evaluate():
     for iteration in range(1, NUM_STEPS + 1):
 
         x, _ = get_random_datasets(BATCH_SIZE, K, MIN_SIZE, MAX_SIZE)
-        # note that each iteration datasets have different size
+        # note that each iteration the datasets have different size
 
         x = x.to(DEVICE)
-        # it has shape [b, n, 2]
+        # it has shape [b, n, 2],
+        # where n is the dataset size
 
         start_time = time.perf_counter()
         optimizer.zero_grad()
 
         y = model(x)  # shape [b, 5 * K]
         means, variances, pis = get_parameters(y)
-        loss = -criterion(x, means, variances, pis)
+        loss = criterion(x, means, variances, pis).neg()
 
         if USE_FLOAT16:
             with amp.scale_loss(loss, optimizer) as loss_scaled:
@@ -135,7 +150,7 @@ def train_and_evaluate():
         if iteration % EVAL_STEP == 0:
             loss = evaluate(model, criterion, val_datasets)
             writer.add_scalar('val_loss', loss, iteration)
-            path = f'{MODELS_DIR}_iteration_{iteration}.pth'
+            path = f'{SAVE_PREFIX}_iteration_{iteration}.pth'
             torch.save(model.state_dict(), path)
 
 
@@ -152,12 +167,12 @@ def evaluate(model, criterion, val_datasets):
             y = model(x)
 
             means, variances, pis = get_parameters(y)
-            loss = criterion(x, means, variances, pis)
+            loss = criterion(x, means, variances, pis).neg()
 
         total_loss += loss.item()
 
     model.train()
-    num_samples = BATCH_SIZE * len(val_datasets)
+    num_samples = len(val_datasets)
     return total_loss / num_samples
 
 

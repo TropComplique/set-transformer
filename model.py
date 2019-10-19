@@ -6,10 +6,11 @@ from blocks import PoolingMultiheadAttention
 
 class SetTransformer(nn.Module):
 
-    def __init__(self, num_outputs):
+    def __init__(self, in_dimension, out_dimension):
         """
         Arguments:
-            num_outputs: an integer.
+            in_dimension: an integer.
+            out_dimension: an integer.
         """
         super().__init__()
 
@@ -18,6 +19,10 @@ class SetTransformer(nn.Module):
         h = 4  # number of heads
         k = 4  # number of seed vectors
 
+        self.embed = nn.Sequential(
+            nn.Linear(in_dimension, d),
+            nn.ReLU()
+        )
         self.encoder = nn.Sequential(
             nn.Linear(2, d),
             InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
@@ -27,7 +32,7 @@ class SetTransformer(nn.Module):
             PoolingMultiheadAttention(d, k, h, RFF(d)),
             SetAttentionBlock(d, h, RFF(d))
         )
-        self.predictor = nn.Linear(k * d, num_outputs)
+        self.predictor = nn.Linear(k * d, out_dimension)
 
         def weights_init(m):
             if isinstance(m, nn.Linear):
@@ -44,9 +49,10 @@ class SetTransformer(nn.Module):
         Arguments:
             x: a float tensor with shape [b, n, d].
         Returns:
-            a float tensor with shape [b, num_outputs].
+            a float tensor with shape [b, out_dimension].
         """
 
+        x = self.embed(x)
         x = self.encoder(x)  # shape [b, n, d]
         x = self.decoder(x)  # shape [b, k, d]
 

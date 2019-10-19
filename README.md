@@ -1,7 +1,5 @@
 # Set Transformer in `pytorch`
 
-*work in progress*
-
 This an implementation of [Set Transformer](https://arxiv.org/abs/1810.00825).
 
 ## Requirements

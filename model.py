@@ -21,10 +21,9 @@ class SetTransformer(nn.Module):
 
         self.embed = nn.Sequential(
             nn.Linear(in_dimension, d),
-            nn.ReLU()
+            nn.ReLU(inplace=True)
         )
         self.encoder = nn.Sequential(
-            nn.Linear(2, d),
             InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
             InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d))
         )
@@ -71,8 +70,8 @@ class RFF(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(d, d), nn.ReLU(inplace=True),
             nn.Linear(d, d), nn.ReLU(inplace=True),
-            nn.Linear(d, d), nn.ReLU(inplace=True),
-            nn.Linear(d, d), nn.ReLU(inplace=True)
+            #nn.Linear(d, d), nn.ReLU(inplace=True),
+            #nn.Linear(d, d), nn.ReLU(inplace=True)
         )
 
     def forward(self, x):

@@ -12,12 +12,12 @@ from input_pipeline import get_random_datasets
 
 
 BATCH_SIZE = 1024
-NUM_STEPS = 10000
+NUM_STEPS = 20000
 EVAL_STEP = 1000
 SAVE_PREFIX = 'models/run00'
 LOGS_DIR = 'summaries/run00/'
 DEVICE = torch.device('cuda:0')
-USE_FLOAT16 = False
+USE_FLOAT16 = True
 
 K = 4  # number of components
 MIN_SIZE = 100  # minimal number of points
@@ -98,11 +98,23 @@ def get_parameters(y):
     return means, variances, pis
 
 
+def compute_groundtruth(x, params, criterion):
+    """
+    This function computes negative log-likelihood (average per data)
+    using true distribution parameters.
+    """
+    means = params['means']
+    variances = params['variances']
+    pis = params['pis']
+    loss = criterion(x, means, variances, pis).neg()
+    return loss
+
+
 def train_and_evaluate():
 
     val_datasets = []
-    for _ in range(300):
-        x, _ = get_random_datasets(BATCH_SIZE, K, MIN_SIZE, MAX_SIZE)
+    for _ in range(1000):
+        x, params = get_random_datasets(BATCH_SIZE, K, MIN_SIZE, MAX_SIZE)
         val_datasets.append(x)
 
     writer = SummaryWriter(LOGS_DIR)
@@ -110,8 +122,8 @@ def train_and_evaluate():
     model = model.train().to(DEVICE)
     criterion = LogLikelihood()
 
-    optimizer = optim.Adam(model.parameters(), lr=1e-2, weight_decay=1e-5)
-    scheduler = CosineAnnealingLR(optimizer, T_max=NUM_STEPS, eta_min=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
+    scheduler = CosineAnnealingLR(optimizer, T_max=NUM_STEPS, eta_min=1e-4)
 
     if USE_FLOAT16:
         model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
@@ -144,6 +156,7 @@ def train_and_evaluate():
         step_time = time.perf_counter() - start_time
         step_time = round(1000 * step_time, 1)
 
+        writer.add_scalar('step_time', step_time, iteration)
         writer.add_scalar('loss', loss.item(), iteration)
         print(f'iteration {iteration}, time {step_time} ms, {loss.item():.3f}')
 

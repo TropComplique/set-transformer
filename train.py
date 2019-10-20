@@ -38,7 +38,8 @@ class LogLikelihood(nn.Module):
 
     def forward(self, x, means, variances, pis):
         """
-        This function returns average likelihood per data.
+        This function returns negative
+        log-likelihood averaged per data.
         Also it averages over the batch dimension.
 
         `x` - a batch of datasets of equal size.
@@ -52,7 +53,7 @@ class LogLikelihood(nn.Module):
             pis: a float tensor with shape [b, k],
                 has positive values only.
         Returns:
-            a float tensor with shape [b].
+            a float tensor with shape [].
         """
         device = x.device
         c = x.size(2)
@@ -79,7 +80,7 @@ class LogLikelihood(nn.Module):
         # it has shape [b]
 
         # now average over the batch
-        return average_likelihood.mean(0)
+        return average_likelihood.mean(0).neg()
 
 
 def get_parameters(y):
@@ -100,22 +101,37 @@ def get_parameters(y):
 
 def compute_groundtruth(x, params, criterion):
     """
-    This function computes negative log-likelihood (average per data)
+    This function computes negative
+    log-likelihood (average per data)
     using true distribution parameters.
     """
-    means = params['means']
-    variances = params['variances']
-    pis = params['pis']
-    loss = criterion(x, means, variances, pis).neg()
+    params = {
+        k: v.to(x.device)
+        for k, v in params.items()
+    }
+    loss = criterion(
+        x, params['means'],
+        params['variances'],
+        params['pis']
+    )
     return loss
 
 
 def train_and_evaluate():
 
     val_datasets = []
-    for _ in range(1000):
+    num_val_batches = 500
+    true_val_loss = 0.0
+
+    for _ in range(num_val_batches):
+
         x, params = get_random_datasets(BATCH_SIZE, K, MIN_SIZE, MAX_SIZE)
         val_datasets.append(x)
+
+        loss = compute_groundtruth(x, params, criterion)
+        true_val_loss += loss.item()
+
+    true_val_loss /= num_val_batches
 
     writer = SummaryWriter(LOGS_DIR)
     model = SetTransformer(in_dimension=2, out_dimension=5 * K)
@@ -130,7 +146,7 @@ def train_and_evaluate():
 
     for iteration in range(1, NUM_STEPS + 1):
 
-        x, _ = get_random_datasets(BATCH_SIZE, K, MIN_SIZE, MAX_SIZE)
+        x, params = get_random_datasets(BATCH_SIZE, K, MIN_SIZE, MAX_SIZE)
         # note that each iteration the datasets have different size
 
         x = x.to(DEVICE)
@@ -142,7 +158,10 @@ def train_and_evaluate():
 
         y = model(x)  # shape [b, 5 * K]
         means, variances, pis = get_parameters(y)
-        loss = criterion(x, means, variances, pis).neg()
+        loss = criterion(x, means, variances, pis)
+
+        true_loss = compute_groundtruth(x, params, criterion)
+        difference = loss - true_loss
 
         if USE_FLOAT16:
             with amp.scale_loss(loss, optimizer) as loss_scaled:
@@ -158,11 +177,13 @@ def train_and_evaluate():
 
         writer.add_scalar('step_time', step_time, iteration)
         writer.add_scalar('loss', loss.item(), iteration)
+        writer.add_scalar('difference_with_true_loss', difference.item(), iteration)
         print(f'iteration {iteration}, time {step_time} ms, {loss.item():.3f}')
 
         if iteration % EVAL_STEP == 0:
             loss = evaluate(model, criterion, val_datasets)
             writer.add_scalar('val_loss', loss, iteration)
+            writer.add_scalar('difference_with_true_val_loss', loss - true_val_loss, iteration)
             path = f'{SAVE_PREFIX}_iteration_{iteration}.pth'
             torch.save(model.state_dict(), path)
 
@@ -180,7 +201,7 @@ def evaluate(model, criterion, val_datasets):
             y = model(x)
 
             means, variances, pis = get_parameters(y)
-            loss = criterion(x, means, variances, pis).neg()
+            loss = criterion(x, means, variances, pis)
 
         total_loss += loss.item()
 

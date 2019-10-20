@@ -46,12 +46,12 @@ class SetTransformer(nn.Module):
     def forward(self, x):
         """
         Arguments:
-            x: a float tensor with shape [b, n, d].
+            x: a float tensor with shape [b, n, in_dimension].
         Returns:
             a float tensor with shape [b, out_dimension].
         """
 
-        x = self.embed(x)
+        x = self.embed(x)  # shape [b, n, d]
         x = self.encoder(x)  # shape [b, n, d]
         x = self.decoder(x)  # shape [b, k, d]
 
@@ -70,8 +70,7 @@ class RFF(nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(d, d), nn.ReLU(inplace=True),
             nn.Linear(d, d), nn.ReLU(inplace=True),
-            #nn.Linear(d, d), nn.ReLU(inplace=True),
-            #nn.Linear(d, d), nn.ReLU(inplace=True)
+            nn.Linear(d, d), nn.ReLU(inplace=True)
         )
 
     def forward(self, x):

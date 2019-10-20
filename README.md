@@ -1,10 +1,10 @@
 # Set Transformer in `pytorch`
 
-This an implementation of [Set Transformer](https://arxiv.org/abs/1810.00825).
+This an implementation of [Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks](https://arxiv.org/abs/1810.00825).
 
 ## Requirements
 1. pytorch 1.3
-2. numpy 1.17, matplotlib 3.1
+2. numpy 1.17, matplotlib 3.1, tqdm 4.32
 3. [NVIDIA/apex](https://github.com/NVIDIA/apex/tree/088985936518be7e25795a30d8ab33affa9db6ed)
 
 ## Credit

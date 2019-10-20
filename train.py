@@ -119,6 +119,7 @@ def compute_groundtruth(x, params, criterion):
 
 def train_and_evaluate():
 
+    criterion = LogLikelihood()
     val_datasets = []
     num_val_batches = 500
     true_val_loss = 0.0
@@ -136,7 +137,6 @@ def train_and_evaluate():
     writer = SummaryWriter(LOGS_DIR)
     model = SetTransformer(in_dimension=2, out_dimension=5 * K)
     model = model.train().to(DEVICE)
-    criterion = LogLikelihood()
 
     optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
     scheduler = CosineAnnealingLR(optimizer, T_max=NUM_STEPS, eta_min=1e-4)
@@ -210,4 +210,5 @@ def evaluate(model, criterion, val_datasets):
     return total_loss / num_samples
 
 
-train_and_evaluate()
+if __name__ == '__main__':
+    train_and_evaluate()

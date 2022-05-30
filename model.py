@@ -6,7 +6,7 @@ from blocks import PoolingMultiheadAttention
 
 class SetTransformer(nn.Module):
 
-    def __init__(self, in_dimension, out_dimension):
+    def __init__(self, in_dimension, hidden_dimension, out_dimension):
         """
         Arguments:
             in_dimension: an integer.
@@ -14,7 +14,7 @@ class SetTransformer(nn.Module):
         """
         super().__init__()
 
-        d = 128
+        d = hidden_dimension
         m = 16  # number of inducing points
         h = 4  # number of heads
         k = 4  # number of seed vectors
@@ -26,6 +26,12 @@ class SetTransformer(nn.Module):
         self.encoder = nn.Sequential(
             InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
             InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d))
+            #InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
+            #InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
+            #InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
+            #InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
+            #InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d)),
+            #InducedSetAttentionBlock(d, m, h, RFF(d), RFF(d))
         )
         self.decoder = nn.Sequential(
             PoolingMultiheadAttention(d, k, h, RFF(d)),
@@ -53,11 +59,13 @@ class SetTransformer(nn.Module):
 
         x = self.embed(x)  # shape [b, n, d]
         x = self.encoder(x)  # shape [b, n, d]
-        x = self.decoder(x)  # shape [b, k, d]
 
-        b, k, d = x.shape
-        x = x.view(b, k * d)
-        return self.predictor(x)
+        return x
+        #x = self.decoder(x)  # shape [b, k, d]
+
+        #b, k, d = x.shape
+        #x = x.view(b, k * d)
+        #return self.predictor(x)
 
 
 class RFF(nn.Module):
